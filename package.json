@@ -1,0 +1,30 @@
+{
+  "name": "sql_database_from_scratch",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Arghyahub/SQL_DATABASE_FROM_SCRATCH.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Arghyahub/SQL_DATABASE_FROM_SCRATCH/issues"
+  },
+  "homepage": "https://github.com/Arghyahub/SQL_DATABASE_FROM_SCRATCH#readme",
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^6.0.2"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^8.3.2",
+    "zod": "^4.3.6"
+  }
+}

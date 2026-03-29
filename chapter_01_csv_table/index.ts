@@ -8,7 +8,11 @@ class DB {
   public constructor() {
     constant.setDirName(__dirname);
     fs.mkdirSync(constant.getDirPath(), { recursive: true });
-    fs.writeFileSync(constant.getMetaDirPath(), "[]", "utf-8");
+    try {
+      fs.accessSync(constant.getMetaDirPath(), fs.constants.F_OK);
+    } catch {
+      fs.writeFileSync(constant.getMetaDirPath(), "[]", "utf-8");
+    }
   }
 
   public async createTable(tableData: z.infer<typeof constant.tableSchema>) {
@@ -21,20 +25,23 @@ class DB {
 
     allTables.push(tableData);
     await Helper.updateTableMetadata(allTables);
-
     await Helper.createTableStorageFile(tableData.table_name);
   }
 
   public async insertIntoTable(
     tableName: string,
     rowData: Record<string, any>,
-  ) {}
+  ) {
+    await Helper.InsertIntoColumn(tableName, rowData);
+  }
 }
 
 const db = new DB();
 
 const tester = new Tester({
   getTableMetadata: Helper.getTableMetadata,
+  createTable: db.createTable,
+  insertIntoTable: db.insertIntoTable,
 });
 
 tester.init();

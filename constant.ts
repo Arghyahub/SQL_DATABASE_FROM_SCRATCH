@@ -2,7 +2,12 @@ import { z } from "zod";
 import path from "path";
 
 class Contant {
-  private readonly dataTypes = ["string", "number", "boolean"] as const;
+  public readonly dataTypes = ["string", "number", "boolean"] as const;
+  public readonly RowTypeSchema = z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+  ]);
   private readonly dir_path = ".data" as const;
   private readonly meta_file = "metadata.json" as const;
   private dirname = __dirname;
@@ -14,11 +19,12 @@ class Contant {
   public readonly columnSchema = z.object({
     name: z.string(),
     type: z.enum(this.dataTypes),
+    is_serial: z.boolean().default(false),
+    last_serial_value: z.number().default(0),
     primary_key: z.boolean().default(false),
     unique: z.boolean().default(false),
     nullable: z.boolean().default(true),
-    default: z.union([z.string(), z.number(), z.boolean()]).optional(),
-    references: z.string().optional(),
+    default: this.RowTypeSchema.nullable(),
   });
 
   public readonly columnSchemaArr = z.array(this.columnSchema);

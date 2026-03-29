@@ -6,7 +6,8 @@ const Menu = ["Create Table", "Insert Row", "Read Row", "Update Row"];
 
 type ConstructorParams = {
   getTableMetadata: () => Promise<z.infer<typeof constant.tableSchemaArr>>;
-  //   createTable: (tableData: z.infer<typeof constant.tableSchema>) => any;
+  createTable: (tableData: z.infer<typeof constant.tableSchema>) => any;
+  insertIntoTable: (tableName: string, rowData: Record<string, any>) => any;
 };
 
 class Tester {
@@ -14,6 +15,10 @@ class Tester {
     z.infer<typeof constant.tableSchemaArr>
   >;
   private createTable: (tableData: z.infer<typeof constant.tableSchema>) => any;
+  private insertIntoTable: (
+    tableName: string,
+    rowData: Record<string, any>,
+  ) => any;
 
   private checkEmpty(value: string, name: string = "Name") {
     return typeof value == "string" && value.trim().length > 0
@@ -48,16 +53,19 @@ class Tester {
         err = ["true", "false"].includes(value)
           ? ""
           : "Value should be boolean";
+        if (err.length > 0) return [null, err];
         return [value === "true", ""];
     }
   }
 
   constructor({
     getTableMetadata,
-    // , createTable
+    createTable,
+    insertIntoTable,
   }: ConstructorParams) {
     this.getTableMetadata = getTableMetadata;
-    // this.createTable = createTable;
+    this.createTable = createTable;
+    this.insertIntoTable = insertIntoTable;
   }
 
   public async init() {
@@ -75,11 +83,12 @@ class Tester {
             { name: "Insert Row", value: "insertRow" },
             { name: "Read Row", value: "readRow" },
             { name: "Update Row", value: "updateRow" },
+            { name: "Exit", value: "exit" },
           ],
         });
 
         switch (answer) {
-          case "createTable":
+          case "createTable": {
             const allTables = await this.getTableMetadata();
 
             const tableName = await input({
@@ -117,60 +126,63 @@ class Tester {
               });
 
               const isPrimaryKey = await confirm({
-                message: "Is Primary Key?",
+                message: "Is Primary Key?(n) ",
                 default: false,
               });
 
-              //   No need ot check unique if primary key
-              const isUnique = await confirm({
-                message: "Is Unique?",
-                default: false,
-              });
+              let is_serial = false;
+              if (isPrimaryKey && columnType === "number") {
+                is_serial = await confirm({
+                  message: "Is Serial?(n) ",
+                  default: false,
+                });
+              }
 
-              //   No need to check not null if primary key
-              const isNullable = await confirm({
-                message: "Is Not Null?",
-                default: true,
-              });
+              let isUnique = true,
+                isNullable = false,
+                defaultValue = null;
 
-              const defaultValueInput = await input({
-                message: "Enter Default Value(Empty to skip):",
-                validate: (value) => {
-                  value = value.trim();
-                  if (value.trim().length === 0 && isNullable) return true;
-                  const [_, err] = this.parseDataType(value, columnType);
-                  return err || true;
-                },
-              });
+              if (!isPrimaryKey) {
+                //   No need ot check unique if primary key
+                isUnique = await confirm({
+                  message: "Is Unique?(n) ",
+                  default: false,
+                });
 
-              let [defaultValue] = this.parseDataType(
-                defaultValueInput,
-                columnType,
-              );
+                //   No need to check not null if primary key
+                isNullable = await confirm({
+                  message: "Is Not Null?(y) ",
+                  default: true,
+                });
 
-              const references = await select({
-                message:
-                  "Choose reference table if to make column as a foreign key",
-                choices: [
-                  { name: "None", value: "null" },
-                  ...allTables.map((tab) => ({
-                    name: tab.table_name,
-                    value: tab.table_name,
-                  })),
-                ],
-              });
+                const defaultValueInput = await input({
+                  message: "Enter Default Value(Empty to skip):",
+                  validate: (value) => {
+                    value = value.trim();
+                    if (value.trim().length === 0 && isNullable) return true;
+                    const [_, err] = this.parseDataType(value, columnType);
+                    return err || true;
+                  },
+                });
+
+                [defaultValue] = this.parseDataType(
+                  defaultValueInput,
+                  columnType,
+                );
+              }
 
               const columnDetail = constant.columnSchema.parse({
                 name: columnName,
                 type: columnType,
+                is_serial: is_serial,
                 primary_key: isPrimaryKey,
                 unique: isUnique,
                 nullable: isNullable,
                 default: defaultValue,
-                references: references,
               });
 
               columns.push(columnDetail);
+              console.log("\n");
             }
 
             const tableDataInput = constant.tableSchema.parse({
@@ -178,21 +190,84 @@ class Tester {
               columns: columns,
             });
 
-            console.log(
-              "Table Data Here : \n",
-              JSON.stringify(tableDataInput, null, 2),
-            );
+            console.log(`Table : ${tableDataInput.table_name}`);
+            console.table(tableDataInput.columns);
+
+            this.createTable(tableDataInput);
+            console.log("\n");
 
             break;
-          case "insertRow":
-            //   await this.insertRow();
+          }
+          case "insertRow": {
+            const allTables = await this.getTableMetadata();
+            if (allTables.length === 0) {
+              console.error("No tables exist. Please create a table first.");
+              break;
+            }
+
+            const tableName = await select({
+              message: "Select table to insert row into:",
+              choices: allTables.map((table) => ({
+                name: table.table_name,
+                value: table.table_name,
+              })),
+            });
+
+            const table = allTables.find((t) => t.table_name === tableName);
+            if (!table) break;
+
+            const rowData: Record<string, any> = {};
+
+            for (const column of table.columns) {
+              if (column.is_serial) {
+                rowData[column.name] = undefined;
+                continue;
+              }
+              const value = await input({
+                message: `Enter value for ${column.name} (${column.type})${
+                  !column.nullable && column.default === null
+                    ? " (Required)"
+                    : " (Empty to skip)"
+                }:`,
+                validate: (val) => {
+                  if (val.trim().length === 0) {
+                    if (!column.nullable && column.default === null) {
+                      return "skipping not allowed";
+                    }
+                    return true;
+                  }
+                  const [_, err] = this.parseDataType(val, column.type);
+                  return err.length > 0 ? err : true;
+                },
+              });
+
+              if (value.trim().length > 0) {
+                const [parsedVal] = this.parseDataType(value, column.type);
+                rowData[column.name] = parsedVal;
+              }
+            }
+
+            const formatRows = Object.fromEntries(
+              Object.entries(rowData).map(([key, value]) => [
+                key,
+                value === undefined ? "N/A" : value,
+              ]),
+            );
+            console.log(`\nData to insert into ${tableName}:`);
+            console.table([formatRows]);
+            this.insertIntoTable(tableName, rowData);
+
+            console.log("\n");
             break;
+          }
           case "readRow":
             //   await this.readRow();
             break;
           case "updateRow":
             //   await this.updateRow();
             break;
+          case "exit":
+            process.exit(0);
         }
 
         console.log("\n");

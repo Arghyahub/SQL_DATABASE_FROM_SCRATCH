@@ -99,29 +99,83 @@ class Helper {
     tableName: string,
     values: Record<string, string>,
   ) {
-    const tableData = await this.getTableMetadata(tableName);
+    const tableData = await this.getTableMetadata();
     const tableIdx = tableData.findIndex(
       (table) => table.table_name === tableName,
     );
     if (tableIdx === -1) throw Error("Table not found");
 
     const columns = tableData[tableIdx].columns;
-    const columnValues = columns.map((column) => {
-      if (column.is_serial) {
-        column.last_serial_value += 1;
-        return column.last_serial_value;
-      } else {
-        return this.getAppropriateValue({
-          value: values[column.name],
-          dataType: column.type,
-          defaultValue: column.default,
-          isNullable: column.nullable,
-        });
-      }
-    });
+    const columnValues = await Promise.all(
+      columns.map(async (column) => {
+        if (column.is_serial) {
+          column.last_serial_value += 1;
+          return column.last_serial_value;
+        } else {
+          const val = this.getAppropriateValue({
+            value: values[column.name],
+            dataType: column.type,
+            defaultValue: column.default,
+            isNullable: column.nullable,
+          });
+
+          if (column.unique && val !== null) {
+            const rows = await this.ReadRow(
+              tableName,
+              { [column.name]: val },
+              1,
+            );
+            if (rows.length > 0) throw Error("Value already exists");
+          } else return val;
+        }
+      }),
+    );
 
     await this.insertIntoTable(tableName, columnValues);
     await this.updateTableMetadata(tableData);
+  }
+
+  public static async ReadRow(
+    tableName: string,
+    where: Record<string, any>,
+    take?: number,
+  ) {
+    const tableData = (await this.getTableMetadata(tableName))[0];
+    if (!tableData) throw Error("Table not found");
+    if (Number.isInteger(take) && take < 0)
+      throw new Error("Take must be greater than 0");
+    if (take == 0) return [];
+
+    const columns = tableData.columns;
+    const colToRec = {} as Record<number, any>;
+    const whereKeys = Object.keys(where);
+    columns.forEach((column, idx) => {
+      if (whereKeys.includes(column.name)) {
+        colToRec[idx] = this.parseByDataType(where[column.name], column.type);
+      }
+    });
+
+    const csvFile = await fs.readFile(
+      constant.getTableStoragePath(tableName, "csv"),
+      "utf-8",
+    );
+    const rows = csvFile.split("\n");
+    const result = [];
+    for (const row of rows) {
+      const col = row.split(",");
+      let match = true;
+      for (const key in colToRec) {
+        if (col[key] != colToRec[key]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) {
+        result.push(col);
+        if (take && result.length === take) break;
+      }
+    }
+    return result;
   }
 }
 

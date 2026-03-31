@@ -97,7 +97,7 @@ class Tester {
                 const tableErr = this.checkProperName(value, "Table Name");
                 if (tableErr.length > 0) return tableErr;
                 const tableAlreadyExists = allTables.find(
-                  (table) => table.table_name === tableName,
+                  (table) => table.table_name === value,
                 );
                 if (tableAlreadyExists) return "Table already exists";
                 return true;
@@ -151,7 +151,7 @@ class Tester {
 
                 //   No need to check not null if primary key
                 isNullable = await confirm({
-                  message: "Is Not Null?(y) ",
+                  message: "Is Null?(y) ",
                   default: true,
                 });
 
